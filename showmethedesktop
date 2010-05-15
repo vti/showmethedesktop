@@ -1,0 +1,248 @@
+#!/usr/bin/env perl
+
+use FindBin;
+use lib "$FindBin::Bin/mojo/lib";
+use lib "$FindBin::Bin/protocol-rfb/lib";
+
+use Mojolicious::Lite;
+use Mojo::IOLoop;
+use Mojo::JSON;
+use Protocol::RFB::Client;
+
+@ARGV = qw/daemon/ unless @ARGV;
+
+my $CLIENTS = {};
+
+my $config = plugin 'json_config' => {default => {address => 'localhost', port => 5900}};
+
+die 'address, port and password are required'
+  unless $config->{address} && $config->{port} && $config->{password};
+
+websocket '/' => sub {
+    my $self = shift;
+    my $tx   = $self->tx;
+
+    my $cid = _get_id($self);
+
+    $CLIENTS->{$cid} = $tx;
+
+    my $total_clients = keys %$CLIENTS;
+    my $ip            = $tx->remote_address;
+    app->log->debug("Client '$ip/$cid' connected [$total_clients]");
+
+    $self->receive_message(
+        sub {
+            my ($self, $message) = @_;
+
+            my $json = Mojo::JSON->new;
+
+            $message = $json->decode($message);
+            return unless $message || $json->error;
+        }
+    );
+
+    $self->finished(
+        sub {
+            delete $CLIENTS->{$cid};
+
+            app->log->debug('Client disconnected');
+        }
+    );
+
+    my $buffer = '';
+
+    my $loop = Mojo::IOLoop->singleton;
+
+    my $id =
+      $loop->connect(address => $config->{address}, port => $config->{port});
+
+    $loop->connection_timeout($id => 300);
+
+    my $vnc = Protocol::RFB::Client->new(password => $config->{password});
+
+    $loop->write_cb(
+        $id => sub {
+            my ($self, $id) = @_;
+
+            $self->not_writing($id);
+
+            my $b = $buffer;
+
+            $buffer = '';
+
+            return $b;
+        }
+    );
+
+    $vnc->write_cb(
+        sub {
+            my ($vnc, $chunk) = @_;
+
+            $buffer = $chunk;
+
+            $loop->writing($id) if defined $buffer;
+        }
+    );
+
+    my $width = 20;
+
+    $vnc->error_cb(sub {});
+
+    $vnc->handshake_cb(
+        sub {
+            my ($vnc) = @_;
+
+            _send_message(
+                $self,
+                type   => 's',
+                name   => $vnc->server_name,
+                width  => $vnc->width,
+                height => $vnc->height
+            );
+
+            $vnc->framebuffer_update_request(0, 0, $width, 400, 0);
+        }
+    );
+
+    $vnc->framebuffer_update_cb(
+        sub {
+            my ($vnc, $message) = @_;
+
+            _send_message($self, type => 'fu', rectangles => $message->rectangles);
+
+            if ($width <= 800) {
+                $width += 20;
+                $vnc->framebuffer_update_request(0, 0, $width, 500, 0);
+            }
+        }
+    );
+
+    $loop->read_cb(
+        $id => sub {
+            my ($self, $id, $chunk) = @_;
+
+            die 'shit' unless $vnc->parse($chunk);
+        }
+    );
+};
+
+get '/' => sub {
+    my $self = shift;
+
+    my $url = $self->req->url->base->clone;
+    $url->scheme($self->req->is_secure ? 'wss' : 'ws');
+    $url->query->params([]);
+
+    $self->stash(websocket_url => $url->to_abs);
+
+    $self->stash(width => 800);
+    $self->stash(height => 500);
+} => 'index';
+
+sub _get_id {
+    my $self = shift;
+
+    my $tx = $self->tx;
+    my $cid = "$tx";
+    #$cid =~ s/\(.*?\)/$1/;
+    return $cid;
+}
+
+sub _message_to_json {
+    my %message = @_;
+
+    my $json = Mojo::JSON->new;
+    return $json->encode({%message});
+}
+
+sub _send_message {
+    my $self = shift;
+
+    $self->send_message(_message_to_json(@_));
+}
+
+sub _send_message_to_other {
+    my $self    = shift;
+    my %message = @_;
+
+    my $id = _get_id($self);
+
+    my $message = _message_to_json(%message);
+
+    foreach my $cid (keys %$CLIENTS) {
+        next if $cid eq $id;
+
+        my $player = $CLIENTS->{$cid};
+
+        # If player is connected
+        $player->send_message($message) if $player;
+    }
+}
+
+sub _send_message_to_all {
+    _send_message_to_other(@_);
+    _send_message(@_);
+}
+
+# see mojo/examples/flash-policy-server.pl
+print "Remember, you need to also run `sudo perl mojo/examples/flash-policy-server.pl` as root for this to work...\n";
+
+app->start;
+
+1;
+
+__DATA__
+
+@@ index.html.ep
+% layout 'wrapper';
+Please, enable JavaScript.<br /><br />
+
+If your browser doesn't support Websockets,<br />
+make sure you have Flash<br />
+installed. It is used as workaround.
+
+@@ layouts/wrapper.html.ep
+<!doctype html><html>
+    <head>
+        <title>Showmethedesktop</title>
+        <link rel="stylesheet" href="/styles.css" type="text/css" />
+        <script type="text/javascript" src="/jquery.min.js"></script>
+        <script type="text/javascript" src="/jquery.json.min.js"></script>
+        <script type="text/javascript" src="/websocketVNC.js"></script>
+        <script type="text/javascript">
+            // Only load the flash fallback when needed
+            if (!('WebSocket' in window)) {
+                document.write([
+                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/swfobject.js"></scr'+'ipt>',
+                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/FABridge.js"></scr'+'ipt>',
+                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/web_socket.js"></scr'+'ipt>'
+                ].join(''));
+            }
+        </script>
+        <script type="text/javascript">
+            if (WebSocket.__initialize) {
+                // Set URL of your WebSocketMain.swf here:
+                WebSocket.__swfLocation = '/web-socket-js/WebSocketMain.swf';
+            }
+
+            $(document).ready(function() {
+                $('#canvas').websocketVNC({
+                    "url":"<%= stash 'websocket_url' %>",
+                    "width":<%= stash 'width' %>,
+                    "height":<%= stash 'height' %>
+                });
+            });
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <table border="0" height="100%" style="margin:auto">
+            <tr><td style="vertical-align:middle">
+                <div id="canvas">
+                    <%== content %>
+                </div>
+            </td></tr>
+            </table>
+        </div>
+    </body>
+</html>

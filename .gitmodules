@@ -1,0 +1,9 @@
+[submodule "public/web-socket-js"]
+	path = public/web-socket-js
+	url = git://github.com/gimite/web-socket-js.git
+[submodule "mojo"]
+	path = mojo
+	url = git://github.com/kraih/mojo.git
+[submodule "protocol-rfb"]
+	path = protocol-rfb
+	url = git://github.com/vti/protocol-rfb.git
