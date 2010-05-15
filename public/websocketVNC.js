@@ -39,6 +39,22 @@
                         return;
                     }
                     vnc.context.fillRect(0, 0, vnc.width, vnc.height);
+
+                    vnc.canvas.bind('mousedown', function(e) {
+                        var pos = vnc.canvas.offset();
+                        var x = Math.floor(e.pageX - pos.left);
+                        var y = Math.floor(e.pageY - pos.top);
+                        ws.send($.toJSON({"type":"pe","x":x,"y":y,"event":"mousedown"}));
+                    });
+
+                    vnc.canvas.bind('mouseup', function(e) {
+                        var pos = vnc.canvas.offset();
+                        var x = Math.floor(e.pageX - pos.left);
+                        var y = Math.floor(e.pageY - pos.top);
+                        ws.send($.toJSON({"type":"pe","x":x,"y":y,"event":"mouseup"}));
+                    });
+
+                    ws.send($.toJSON({"type":"fuq","x":0,"y":0,"width":vnc.width,"height":vnc.height}));
                 };
 
                 ws.onmessage = function(e) {

@@ -8,10 +8,13 @@ use Mojolicious::Lite;
 use Mojo::IOLoop;
 use Mojo::JSON;
 use Protocol::RFB::Client;
+use Protocol::RFB::Framebuffer;
 
 @ARGV = qw/daemon/ unless @ARGV;
 
 my $CLIENTS = {};
+
+my $state = 'init';
 
 my $config = plugin 'json_config' => {default => {address => 'localhost', port => 5900}};
 
@@ -30,25 +33,6 @@ websocket '/' => sub {
     my $ip            = $tx->remote_address;
     app->log->debug("Client '$ip/$cid' connected [$total_clients]");
 
-    $self->receive_message(
-        sub {
-            my ($self, $message) = @_;
-
-            my $json = Mojo::JSON->new;
-
-            $message = $json->decode($message);
-            return unless $message || $json->error;
-        }
-    );
-
-    $self->finished(
-        sub {
-            delete $CLIENTS->{$cid};
-
-            app->log->debug('Client disconnected');
-        }
-    );
-
     my $buffer = '';
 
     my $loop = Mojo::IOLoop->singleton;
@@ -59,6 +43,13 @@ websocket '/' => sub {
     $loop->connection_timeout($id => 300);
 
     my $vnc = Protocol::RFB::Client->new(password => $config->{password});
+
+    my $framebuffer = Protocol::RFB::Framebuffer->new(
+        width  => $config->{width},
+        height => $config->{height},
+        x      => 0,
+        y      => 0
+    );
 
     $loop->write_cb(
         $id => sub {
@@ -71,6 +62,16 @@ websocket '/' => sub {
             $buffer = '';
 
             return $b;
+        }
+    );
+
+    $loop->error_cb(
+        $id => sub {
+            my ($loop, $id) = @_;
+
+            $loop->drop($id);
+
+            $self->finish;
         }
     );
 
@@ -99,8 +100,6 @@ websocket '/' => sub {
                 width  => $vnc->width,
                 height => $vnc->height
             );
-
-            $vnc->framebuffer_update_request(0, 0, $width, 400, 0);
         }
     );
 
@@ -108,11 +107,32 @@ websocket '/' => sub {
         sub {
             my ($vnc, $message) = @_;
 
+            foreach my $rectangle (@{$message->rectangles}) {
+                if ($rectangle->{encoding} eq 'Raw') {
+                       $framebuffer->set_rectangle(
+                           $rectangle->{x},     $rectangle->{y},
+                           $rectangle->{width}, $rectangle->{height},
+                           $rectangle->{data}
+                       );
+                }
+                else {
+                }
+            }
+
             _send_message($self, type => 'fu', rectangles => $message->rectangles);
 
-            if ($width <= 800) {
-                $width += 20;
-                $vnc->framebuffer_update_request(0, 0, $width, 500, 0);
+            return if $state eq 'normal';
+
+            if ($framebuffer->size >= $config->{width} * $config->{height}) {
+                $state = 'normal';
+
+                my $update_cb;
+                $update_cb = sub {
+                   warn 'update_request!';
+                   $vnc->framebuffer_update_request(0, 0, $config->{width}, $config->{height}, 1);
+                   $loop->timer(1 => $update_cb);
+                };
+                $loop->timer(1 => $update_cb);
             }
         }
     );
@@ -122,6 +142,49 @@ websocket '/' => sub {
             my ($self, $id, $chunk) = @_;
 
             die 'shit' unless $vnc->parse($chunk);
+        }
+    );
+
+    $self->receive_message(
+        sub {
+            my ($self, $message) = @_;
+
+            warn "Message from websocket $message";
+
+            my $json = Mojo::JSON->new;
+
+            $message = $json->decode($message);
+            return unless $message || $json->error;
+
+            if ($message->{type} eq 'fuq') {
+                $vnc->framebuffer_update_request($message->{x}, $message->{y},
+                    $message->{width}, $message->{height},
+                    $message->{incremental});
+            }
+            elsif ($message->{type} eq 'pe') {
+                my $mask = 0;
+
+                if ($message->{event} eq 'mouseup') {
+                    $mask = 0;
+                }
+                elsif ($message->{event} eq 'mousedown') {
+                    $mask = 1 << 7;
+                }
+                else {
+                    warn 'Unknown pointer event';
+                    return;
+                }
+
+                $vnc->pointer_event($message->{x}, $message->{y}, $mask);
+            }
+        }
+    );
+
+    $self->finished(
+        sub {
+            delete $CLIENTS->{$cid};
+
+            app->log->debug('Client disconnected');
         }
     );
 };
@@ -135,8 +198,8 @@ get '/' => sub {
 
     $self->stash(websocket_url => $url->to_abs);
 
-    $self->stash(width => 800);
-    $self->stash(height => 500);
+    $self->stash(width => $config->{width});
+    $self->stash(height => $config->{height});
 } => 'index';
 
 sub _get_id {
