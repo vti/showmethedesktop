@@ -2,13 +2,13 @@
 
 use FindBin;
 use lib "$FindBin::Bin/mojo/lib";
+use lib "$FindBin::Bin/mojo-json-any/lib";
 use lib "$FindBin::Bin/protocol-rfb/lib";
 
 use Mojolicious::Lite;
 use Mojo::IOLoop;
-use Mojo::JSON;
+use Mojo::JSON::Any;
 use Protocol::RFB::Client;
-use Protocol::RFB::Framebuffer;
 
 @ARGV = qw/daemon/ unless @ARGV;
 
@@ -44,13 +44,6 @@ websocket '/' => sub {
 
     my $vnc = Protocol::RFB::Client->new(password => $config->{password});
 
-    my $framebuffer = Protocol::RFB::Framebuffer->new(
-        width  => $config->{width},
-        height => $config->{height},
-        x      => 0,
-        y      => 0
-    );
-
     $loop->write_cb(
         $id => sub {
             my ($self, $id) = @_;
@@ -79,13 +72,13 @@ websocket '/' => sub {
         sub {
             my ($vnc, $chunk) = @_;
 
+            warn 'write to vnc';
+
             $buffer = $chunk;
 
             $loop->writing($id) if defined $buffer;
         }
     );
-
-    my $width = 20;
 
     $vnc->error_cb(sub {});
 
@@ -107,33 +100,8 @@ websocket '/' => sub {
         sub {
             my ($vnc, $message) = @_;
 
-            foreach my $rectangle (@{$message->rectangles}) {
-                if ($rectangle->{encoding} eq 'Raw') {
-                       $framebuffer->set_rectangle(
-                           $rectangle->{x},     $rectangle->{y},
-                           $rectangle->{width}, $rectangle->{height},
-                           $rectangle->{data}
-                       );
-                }
-                else {
-                }
-            }
-
+            warn 'Sending rectangles to the client =' . @{$message->rectangles};
             _send_message($self, type => 'fu', rectangles => $message->rectangles);
-
-            return if $state eq 'normal';
-
-            if ($framebuffer->size >= $config->{width} * $config->{height}) {
-                $state = 'normal';
-
-                my $update_cb;
-                $update_cb = sub {
-                   warn 'update_request!';
-                   $vnc->framebuffer_update_request(0, 0, $config->{width}, $config->{height}, 1);
-                   $loop->timer(1 => $update_cb);
-                };
-                $loop->timer(1 => $update_cb);
-            }
         }
     );
 
@@ -151,7 +119,7 @@ websocket '/' => sub {
 
             warn "Message from websocket $message";
 
-            my $json = Mojo::JSON->new;
+            my $json = Mojo::JSON::Any->new;
 
             $message = $json->decode($message);
             return unless $message || $json->error;
@@ -168,7 +136,13 @@ websocket '/' => sub {
                     $mask = 0;
                 }
                 elsif ($message->{event} eq 'mousedown') {
-                    $mask = 1 << 7;
+                    $mask = 1;
+                }
+                elsif ($message->{event} eq 'mousemove') {
+                    $mask = 0;
+                }
+                elsif ($message->{event} eq 'mousemove+mousedown') {
+                    $mask = 1;
                 }
                 else {
                     warn 'Unknown pointer event';
@@ -185,6 +159,8 @@ websocket '/' => sub {
             delete $CLIENTS->{$cid};
 
             app->log->debug('Client disconnected');
+
+            undef $vnc;
         }
     );
 };
@@ -214,7 +190,7 @@ sub _get_id {
 sub _message_to_json {
     my %message = @_;
 
-    my $json = Mojo::JSON->new;
+    my $json = Mojo::JSON::Any->new;
     return $json->encode({%message});
 }
 
@@ -222,29 +198,6 @@ sub _send_message {
     my $self = shift;
 
     $self->send_message(_message_to_json(@_));
-}
-
-sub _send_message_to_other {
-    my $self    = shift;
-    my %message = @_;
-
-    my $id = _get_id($self);
-
-    my $message = _message_to_json(%message);
-
-    foreach my $cid (keys %$CLIENTS) {
-        next if $cid eq $id;
-
-        my $player = $CLIENTS->{$cid};
-
-        # If player is connected
-        $player->send_message($message) if $player;
-    }
-}
-
-sub _send_message_to_all {
-    _send_message_to_other(@_);
-    _send_message(@_);
 }
 
 # see mojo/examples/flash-policy-server.pl
