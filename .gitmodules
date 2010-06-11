@@ -7,3 +7,6 @@
 [submodule "protocol-rfb"]
 	path = protocol-rfb
 	url = git://github.com/vti/protocol-rfb.git
+[submodule "mojo-json-any"]
+	path = mojo-json-any
+	url = git://github.com/vti/mojo-json-any.git
