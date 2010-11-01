@@ -1,0 +1,177 @@
+#!/usr/bin/env perl
+
+# Copyright (C) 2010, Viacheslav Tykhanovskyi
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use strict;
+use warnings;
+
+use Getopt::Long 'GetOptions';
+use File::Basename;
+
+my $ADDRESS = 'localhost';
+my $PORT    = 5900;
+my $PASSWORD;
+
+my $X = 0;
+my $Y = 0;
+my $WIDTH;
+my $HEIGHT;
+my $IMAGE = 'screenshot.png';
+
+my $img;
+my $offset = 0;
+
+GetOptions(
+    "address=s"  => \$ADDRESS,
+    "port=s"     => \$PORT,
+    "password=s" => \$PASSWORD,
+    "x=i"        => \$X,
+    "y=i"        => \$Y,
+    "width=i"    => \$WIDTH,
+    "height=i"   => \$HEIGHT,
+    "image=s"    => \$IMAGE
+);
+
+my $basename = File::Basename::basename $0;
+my $USAGE    = <<"EOF";
+usage: $basename --password <password>
+
+Other options:
+
+    --address   Default is 'localhost'
+    --port      Default is '5900'
+
+    --x         Default is '0'
+    --y         Default is '0'
+
+    --width     Default is server's width
+    --height    Default is server's height
+
+    --image     Default is 'screenshot.png'
+
+EOF
+
+die $USAGE unless $PASSWORD;
+
+use Protocol::RFB::Client;
+
+use Imager;
+use Imager::Fill;
+
+use IO::Socket::INET;
+use IO::Poll qw/POLLIN/;
+
+my $socket = IO::Socket::INET->new(
+    Blocking => 0,
+    PeerAddr => $ADDRESS,
+    PeerPort => $PORT,
+    Proto    => 'tcp',
+    Type     => SOCK_STREAM
+);
+
+$socket->blocking(0);
+
+my $retry = 3;
+while (!$socket->connected) {
+    sleep 1;
+    $retry-- || die "Can't connect to $ADDRESS:$PORT";
+}
+
+my $vnc = Protocol::RFB::Client->new(password => $PASSWORD);
+
+$vnc->on_write(
+    sub {
+        my ($self, $chunk) = @_;
+
+        syswrite($socket, $chunk, length $chunk);
+    }
+);
+
+$vnc->on_error(
+    sub {
+        my $self  = shift;
+        my $error = shift;
+
+        warn 'Error: ' . $error;
+    }
+);
+
+$vnc->on_handshake(
+    sub {
+        my ($self) = @_;
+
+        $WIDTH  ||= $self->width;
+        $HEIGHT ||= $self->height;
+
+        warn 'name=' . $self->server_name;
+        warn 'width=' . $self->width;
+        warn 'height=' . $self->height;
+
+        $self->framebuffer_update_request($X, $Y, $WIDTH, $HEIGHT, 0);
+    }
+);
+
+$vnc->on_framebuffer_update(
+    sub {
+        my ($self, $message) = @_;
+
+        my $rectangles = $message->rectangles;
+
+        foreach my $rectangle (@$rectangles) {
+            if ($rectangle->{encoding} eq 'Raw') {
+                $offset += $rectangle->{height} * $rectangle->{width};
+
+                print int(100 * $offset / ($WIDTH * $HEIGHT)) . "%...";
+
+                $img ||= Imager->new(xsize => $WIDTH, ysize => $HEIGHT);
+
+                my $sub_img = Imager->new(xsize => $rectangle->{width}, ysize => $rectangle->{height});
+                foreach my $y (0 .. $rectangle->{height}) {
+                    foreach my $x (0 .. $rectangle->{width}) {
+                        my $pixel =
+                          $rectangle->{data}->[$x + $y * $rectangle->{width}];
+
+                        $sub_img->setpixel(x => $x, y => $y, color => $pixel);
+                    }
+                }
+
+                $img->paste(left => $rectangle->{x}, top => $rectangle->{y}, img => $sub_img);
+
+                print "\n";
+            }
+            else {
+                warn 'NEW ENCODING!';
+            }
+        }
+
+        if ($offset >= $WIDTH * $HEIGHT) {
+            warn "Saving to $IMAGE...";
+            $img->write(file => $IMAGE, type => 'png') or die $img->errstr;
+
+            $self->done;
+        }
+    }
+);
+
+my $poll = IO::Poll->new;
+
+$poll->mask($socket => POLLIN);
+
+while (1) {
+    $poll->poll(0);
+
+    if (my @read = $poll->handles(POLLIN)) {
+        my $rb = sysread($socket, my $chunk, 1024);
+
+        die "Error: $!" unless defined $rb;
+
+        $vnc->parse($chunk) if $rb > 0;
+
+        last if $vnc->error;
+
+        last if $vnc->is_done;
+    }
+}

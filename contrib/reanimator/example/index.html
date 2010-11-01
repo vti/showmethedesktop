@@ -1,0 +1,34 @@
+<!doctype html><html>
+    <head>
+        <script type="text/javascript" src="jquery.min.js"></script>
+        </script>
+        <script type="text/javascript">
+            $(document).ready(function() {
+                $('#container').html('Connecting...');
+
+                var ws = new WebSocket("ws://localhost:3000");
+
+                ws.onerror = function(e) {
+                    $('#container').html('Error: ' + e);
+                };
+
+                ws.onopen = function() {
+                    $('#container').html('Connected!');
+                };
+
+                ws.onmessage = function(e) {
+                    var msg = e.data;
+                    $('#container').html('Message: ' + msg);
+                };
+
+                ws.onclose = function() {
+                    $('#container').html('Disconnected :(');
+                };
+            });
+        </script>
+    </head>
+    <body>
+        <div id="container">
+        </div>
+    </body>
+</html>

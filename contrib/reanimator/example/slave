@@ -1,0 +1,77 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use Reanimator;
+use Reanimator:Slave;
+
+my $server = Reanimator->new;
+
+$server->on_connect(
+    sub {
+        my ($self, $client) = @_;
+
+        warn 'Client connected!';
+
+        $client->on_message(
+            sub {
+                my ($client, $message) = @_;
+
+                warn "Message from client=$message";
+            }
+        );
+
+        $client->on_error(
+            sub {
+                my ($client, $error) = @_;
+
+                warn "Error=$error";
+            }
+        );
+
+        $client->on_disconnect(
+            sub {
+                my ($clent) = @_;
+
+                warn "Disconnected!";
+            }
+        );
+
+        my $c = Reanimator::Slave->new(
+            address    => '127.0.0.1',
+            port       => 3333,
+            on_message => sub {
+                my ($c, $chunk) = @_;
+
+                warn '< ' . $_[1];
+
+                $client->send_message($chunk);
+            },
+            on_connect => sub {
+                my $slave = shift;
+
+                $slave->send_message('Hello!');
+            },
+            on_disconnect => sub {
+            },
+            on_error => sub {
+            }
+        );
+
+        $server->add_slave($c);
+    }
+);
+
+$server->on_error(
+    sub {
+        my ($self, $error) = @_;
+
+        warn "Error=$error";
+    }
+);
+
+$server->start;
