@@ -29,7 +29,6 @@ sub parse {
     return 1 unless length($self->{buffer}) == 16;
 
     $self->{format} = [unpack('CCCCnnnCCCC3', $self->{buffer})];
-    $#{$self->{format}} = 9;
     $_ = int for @{$self->{format}};
 
     $self->state('done');
@@ -40,7 +39,7 @@ sub parse {
 sub to_string {
     my $self = shift;
 
-    return pack('CCCCnnnCCCC3', @{$self->{format}});
+    return pack('CC3CCCCnnnCCCC3', 0, 0, 0, 0, @{$self->{format}});
 }
 
 1;

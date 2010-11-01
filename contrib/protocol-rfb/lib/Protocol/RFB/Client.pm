@@ -139,24 +139,36 @@ sub _parse_handshake {
         return 1;
     }
 
+    $self->_setup_after_handshake;
+
+    $self->state('ready');
+
+    $self->_send_init_messages;
+
+    $self->on_handshake->($self);
+
+    return 1;
+}
+
+sub _setup_after_handshake {
+    my $self = shift;
+
+    my $handshake = $self->handshake;
+
     $self->width($handshake->width);
     $self->height($handshake->height);
 
     $self->server_name($handshake->server_name);
 
     $self->pixel_format($handshake->format);
+}
 
-    $self->state('ready');
+sub _send_init_messages {
+    my $self = shift;
 
-    my $pixel_format = $handshake->format;
+    $self->set_pixel_format;
 
-    $self->write($pixel_format);
-
-    $self->set_encodings($self->encodings);
-
-    $self->on_handshake->($self);
-
-    return 1;
+    $self->set_encodings;
 }
 
 sub _parse_server_message {
@@ -202,9 +214,20 @@ sub framebuffer_update_request {
     $self->write($m->to_string);
 }
 
+sub set_pixel_format {
+    my $self = shift;
+
+    my $format = $self->pixel_format->{format};
+
+    my $m = $self->_build_message(pixel_format => (format => $format));
+
+    $self->write($m->to_string);
+}
+
 sub set_encodings {
     my $self = shift;
-    my ($encodings) = @_;
+
+    my $encodings = $self->encodings;
 
     my $m = $self->_build_message(set_encodings => (encodings => $encodings));
 

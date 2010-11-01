@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 36;
+use Test::More tests => 37;
 
 use_ok('Protocol::RFB::Message::PixelFormat');
 
@@ -44,4 +44,5 @@ is($m->red_shift, 50);
 is($m->green_shift, 51);
 is($m->blue_shift, 52);
 
-is(length $m->to_string, 16);
+is(length $m->to_string, 20);
+is("$m", pack('CC3CCCCnnnCCCC3', 0, 0, 0, 0, 25, 31, 1, 0, 10, 15, 19, 50, 51, 52, 0, 0, 255));
