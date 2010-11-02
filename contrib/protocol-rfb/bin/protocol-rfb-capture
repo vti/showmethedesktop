@@ -128,17 +128,31 @@ $vnc->on_framebuffer_update(
 
                 $img ||= Imager->new(xsize => $WIDTH, ysize => $HEIGHT);
 
-                my $sub_img = Imager->new(xsize => $rectangle->{width}, ysize => $rectangle->{height});
+                my $sub_img = Imager->new(
+                    xsize => $rectangle->{width},
+                    ysize => $rectangle->{height}
+                );
+
                 foreach my $y (0 .. $rectangle->{height}) {
                     foreach my $x (0 .. $rectangle->{width}) {
-                        my $pixel =
-                          $rectangle->{data}->[$x + $y * $rectangle->{width}];
+                        my $offset = ($x + $y * $rectangle->{width}) * 4;
+                        my $r      = $rectangle->{data}->[$offset];
+                        my $g      = $rectangle->{data}->[$offset + 1];
+                        my $b      = $rectangle->{data}->[$offset + 2];
 
-                        $sub_img->setpixel(x => $x, y => $y, color => $pixel);
+                        $sub_img->setpixel(
+                            x     => $x,
+                            y     => $y,
+                            color => [$r, $g, $b]
+                        );
                     }
                 }
 
-                $img->paste(left => $rectangle->{x}, top => $rectangle->{y}, img => $sub_img);
+                $img->paste(
+                    left => $rectangle->{x},
+                    top  => $rectangle->{y},
+                    img  => $sub_img
+                );
 
                 print "\n";
             }

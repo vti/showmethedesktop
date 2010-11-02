@@ -145,6 +145,7 @@ sub _parse_handshake {
 
     $self->_send_init_messages;
 
+    warn 'Call on_handshake callback' if DEBUG;
     $self->on_handshake->($self);
 
     return 1;
@@ -152,6 +153,8 @@ sub _parse_handshake {
 
 sub _setup_after_handshake {
     my $self = shift;
+
+    warn 'Setup after handshake' if DEBUG;
 
     my $handshake = $self->handshake;
 
@@ -165,6 +168,8 @@ sub _setup_after_handshake {
 
 sub _send_init_messages {
     my $self = shift;
+
+    warn 'Sending initializing message' if DEBUG;
 
     $self->set_pixel_format;
 
@@ -221,6 +226,8 @@ sub set_pixel_format {
 
     my $m = $self->_build_message(pixel_format => (format => $format));
 
+    warn 'Set pixel format' if DEBUG;
+
     $self->write($m->to_string);
 }
 
@@ -230,6 +237,8 @@ sub set_encodings {
     my $encodings = $self->encodings;
 
     my $m = $self->_build_message(set_encodings => (encodings => $encodings));
+
+    warn 'Set encodings' if DEBUG;
 
     $self->write($m->to_string);
 }
@@ -243,6 +252,20 @@ sub pointer_event {
             x           => $x,
             y           => $y,
             button_mask => $mask
+        )
+    );
+
+    $self->write($m->to_string);
+}
+
+sub key_event {
+    my $self = shift;
+    my ($is_down, $key) = @_;
+
+    my $m = $self->_build_message(
+        key_event => (
+            down => $is_down,
+            key  => $key
         )
     );
 

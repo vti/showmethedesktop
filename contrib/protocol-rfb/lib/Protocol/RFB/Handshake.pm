@@ -107,12 +107,18 @@ sub parse {
         $self->res($self->_build_message('init'));
     }
     elsif ($res_name eq 'init') {
-        warn 'Received settings' if DEBUG;
-
         $self->width($self->res->width);
         $self->height($self->res->height);
         $self->server_name($self->res->server_name);
         $self->format($self->res->format);
+
+        if (DEBUG) {
+            warn 'Received settings';
+
+            warn "name=" . $self->server_name;
+            warn "width=" . $self->width;
+            warn "height=" . $self->height;
+        }
 
         $self->done;
     }

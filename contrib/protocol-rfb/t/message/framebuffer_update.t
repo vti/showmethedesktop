@@ -66,7 +66,7 @@ is_deeply(
             width    => 1,
             height   => 1,
             encoding => 'Raw',
-            data     => [[255, 255, 128]]
+            data     => [255, 255, 128, 255]
         }
     ]
 );
@@ -121,7 +121,7 @@ is_deeply(
             width    => 1,
             height   => 1,
             encoding => 'Raw',
-            data     => [[0, 0, 0]]
+            data     => [0, 0, 0, 255]
         }
     ]
 );
@@ -146,14 +146,14 @@ is_deeply(
             width    => 1,
             height   => 1,
             encoding => 'Raw',
-            data     => [[0, 0, 0]]
+            data     => [0, 0, 0, 255]
         },
         {   x        => 6,
             y        => 15,
             width    => 1,
             height   => 1,
             encoding => 'Raw',
-            data     => [[0, 0, 0]]
+            data     => [0, 0, 0, 255]
         },
     ]
 );
@@ -176,7 +176,7 @@ is_deeply(
             width    => 1,
             height   => 2,
             encoding => 'Raw',
-            data     => [[0, 0, 0], [0, 0, 0]]
+            data     => [0, 0, 0, 255, 0, 0, 0, 255]
         },
     ]
 );

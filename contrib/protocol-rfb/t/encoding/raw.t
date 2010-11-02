@@ -40,7 +40,7 @@ $m = Protocol::RFB::Encoding::Raw->new(
     rectangle    => $rectangle
 );
 is($m->parse(pack('C', 255) . pack('C', 255)), 2);
-is_deeply($m->data, [[255, 0, 0], [255, 0, 0]]);
+is_deeply($m->data, [255, 0, 0, 255, 255, 0, 0, 255]);
 
 $pixel_format->bits_per_pixel(16);
 $m = Protocol::RFB::Encoding::Raw->new(
@@ -48,7 +48,7 @@ $m = Protocol::RFB::Encoding::Raw->new(
     rectangle    => $rectangle
 );
 is($m->parse(pack('CC', 255, 124) . pack('CC', 255, 124)), 4);
-is_deeply($m->data, [[255, 124, 0], [255, 124, 0]]);
+is_deeply($m->data, [255, 124, 0, 255, 255, 124, 0, 255]);
 
 $pixel_format->bits_per_pixel(32);
 $m = Protocol::RFB::Encoding::Raw->new(
@@ -56,4 +56,4 @@ $m = Protocol::RFB::Encoding::Raw->new(
     rectangle    => $rectangle
 );
 is($m->parse(pack('CCCC', 255, 124, 124, 123) . pack('CCCC', 255, 124, 124, 123)), 8);
-is_deeply($m->data, [[255, 124, 124], [255, 124, 124]]);
+is_deeply($m->data, [255, 124, 124, 255, 255, 124, 124, 255]);

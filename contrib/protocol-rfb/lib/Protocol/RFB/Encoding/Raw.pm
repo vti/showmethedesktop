@@ -63,12 +63,13 @@ sub parse {
             $color = [
                 ($pixel >> $red_shift) & $red_max,
                 ($pixel >> $green_shift) & $green_max,
-                ($pixel >> $blue_shift) & $blue_max
+                ($pixel >> $blue_shift) & $blue_max,
+                255
             ];
             $cache->{$pixel} = $color;
         }
 
-        push @$parsed, $color;
+        push @$parsed, @$color;
     }
 
     $self->data($parsed);
