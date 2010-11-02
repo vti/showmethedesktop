@@ -25,6 +25,8 @@ sub state { @_ > 1 ? $_[0]->{state} = $_[1] : $_[0]->{state} }
 sub done { shift->state('done') }
 sub is_done { shift->state eq 'done' }
 
+sub error { @_ > 1 ? $_[0]->{error} = $_[1] : $_[0]->{error} }
+
 sub need_more_data {
     @_ > 1 ? $_[0]->{need_more_data} = $_[1] : $_[0]->{need_more_data};
 }
