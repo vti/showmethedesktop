@@ -1,0 +1,60 @@
+<!doctype html><html>
+    <head>
+        <title>Showmethedesktop</title>
+        <link rel="stylesheet" href="/styles.css" type="text/css" />
+        <script type="text/javascript" src="jquery.min.js"></script>
+        <script type="text/javascript" src="jquery.json.min.js"></script>
+        <script type="text/javascript" src="vnc.js"></script>
+        <script type="text/javascript">
+            $(document).ready(function() {
+                <!--$('#canvas').websocketVNC({-->
+                    <!--"url":"ws://127.0.0.1:3000"-->
+                <!--});-->
+
+                var ws = new WebSocket("ws://127.0.0.1:3000");
+
+                var vnc = new VNC();
+                vnc.onsend = function(message) {
+                    ws.send(message);
+                };
+
+                ws.onerror = function(e) {
+                    vnc.displayMessage("Error: " + e);
+                };
+
+                ws.onopen = function() {
+                    $('#canvas').html('Connected. Initializing...');
+                };
+
+                ws.onmessage = function(e) {
+                    var data = $.evalJSON(e.data);
+
+                    if (data.type == 's') {
+                        $('#canvas').html('Loading...');
+
+                        vnc.init(data);
+                    }
+                    else if (data.type == 'fu') {
+                        console.log("websocket update");
+                        vnc.update(data.rectangles)
+                    }
+                };
+
+                ws.onclose = function() {
+                    $('#canvas').html('Disconnected');
+                };
+            });
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <table border="0" height="100%" style="margin:auto">
+            <tr><td style="vertical-align:middle">
+                <div id="canvas">
+                    Connecting...
+                </div>
+            </td></tr>
+            </table>
+        </div>
+    </body>
+</html>

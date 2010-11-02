@@ -1,264 +1,164 @@
 #!/usr/bin/env perl
 
-use FindBin;
-use lib "$FindBin::Bin/mojo/lib";
-use lib "$FindBin::Bin/mojo-json-any/lib";
-use lib "$FindBin::Bin/protocol-rfb/lib";
+use strict;
+use warnings;
 
-use Mojolicious::Lite;
-use Mojo::IOLoop;
-use Mojo::JSON::Any;
+use FindBin;
+#use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
+use lib "/Users/vti/dev/protocol-rfb/lib";
+use lib "$FindBin::Bin/contrib/reanimator/lib";
+
+use JSON;
+use ReAnimator;
+use ReAnimator::Slave;
 use Protocol::RFB::Client;
 
-@ARGV = qw/daemon/ unless @ARGV;
+use Getopt::Long 'GetOptions';
+use File::Basename;
 
-my $CLIENTS = {};
+my $ADDRESS = 'localhost';
+my $PORT    = 5900;
+my $PASSWORD;
+my $WIDTH;
+my $HEIGHT;
 
-my $state = 'init';
+GetOptions(
+    "address=s"  => \$ADDRESS,
+    "port=s"     => \$PORT,
+    "password=s" => \$PASSWORD,
+    "width=i"    => \$WIDTH,
+    "height=i"   => \$HEIGHT
+);
 
-my $config = plugin 'json_config' => {default => {address => 'localhost', port => 5900}};
+my $basename = File::Basename::basename $0;
+my $USAGE    = <<"EOF";
+Usage: $basename --password <password>
 
-die 'address, port and password are required'
-  unless $config->{address} && $config->{port} && $config->{password};
+Other options:
 
-websocket '/' => sub {
-    my $self = shift;
-    my $tx   = $self->tx;
+    --address   Default is '$ADDRESS'
+    --port      Default is '$PORT'
 
-    my $cid = _get_id($self);
+    --width     Default is server's width
+    --height    Default is server's height
 
-    $CLIENTS->{$cid} = $tx;
+EOF
 
-    my $total_clients = keys %$CLIENTS;
-    my $ip            = $tx->remote_address;
-    app->log->debug("Client '$ip/$cid' connected [$total_clients]");
+die $USAGE unless $PASSWORD;
 
-    my $buffer = '';
+my $server = ReAnimator->new;
 
-    my $loop = Mojo::IOLoop->singleton;
+$server->on_connect(
+    sub {
+        my ($self, $client) = @_;
 
-    my $id =
-      $loop->connect(address => $config->{address}, port => $config->{port});
+        my $slave =
+          ReAnimator::Slave->new(address => $ADDRESS, port => $PORT);
 
-    $loop->connection_timeout($id => 300);
+        my $vnc = Protocol::RFB::Client->new(password => '333333');
 
-    my $vnc = Protocol::RFB::Client->new(password => $config->{password});
+        $slave->on_message(
+            sub {
+                my $slave = shift;
+                my $chunk = shift;
 
-    $loop->write_cb(
-        $id => sub {
-            my ($self, $id) = @_;
-
-            $self->not_writing($id);
-
-            my $b = $buffer;
-
-            $buffer = '';
-
-            return $b;
-        }
-    );
-
-    $loop->error_cb(
-        $id => sub {
-            my ($loop, $id) = @_;
-
-            $loop->drop($id);
-
-            $self->finish;
-        }
-    );
-
-    $vnc->write_cb(
-        sub {
-            my ($vnc, $chunk) = @_;
-
-            warn 'write to vnc';
-
-            $buffer = $chunk;
-
-            $loop->writing($id) if defined $buffer;
-        }
-    );
-
-    $vnc->error_cb(sub {});
-
-    $vnc->handshake_cb(
-        sub {
-            my ($vnc) = @_;
-
-            _send_message(
-                $self,
-                type   => 's',
-                name   => $vnc->server_name,
-                width  => $vnc->width,
-                height => $vnc->height
-            );
-        }
-    );
-
-    $vnc->framebuffer_update_cb(
-        sub {
-            my ($vnc, $message) = @_;
-
-            warn 'Sending rectangles to the client =' . @{$message->rectangles};
-            _send_message($self, type => 'fu', rectangles => $message->rectangles);
-        }
-    );
-
-    $loop->read_cb(
-        $id => sub {
-            my ($self, $id, $chunk) = @_;
-
-            die 'shit' unless $vnc->parse($chunk);
-        }
-    );
-
-    $self->receive_message(
-        sub {
-            my ($self, $message) = @_;
-
-            warn "Message from websocket $message";
-
-            my $json = Mojo::JSON::Any->new;
-
-            $message = $json->decode($message);
-            return unless $message || $json->error;
-
-            if ($message->{type} eq 'fuq') {
-                $vnc->framebuffer_update_request($message->{x}, $message->{y},
-                    $message->{width}, $message->{height},
-                    $message->{incremental});
+                $vnc->parse($chunk);
             }
-            elsif ($message->{type} eq 'pe') {
-                my $mask = 0;
+        );
 
-                if ($message->{event} eq 'mouseup') {
-                    $mask = 0;
-                }
-                elsif ($message->{event} eq 'mousedown') {
-                    $mask = 1;
-                }
-                elsif ($message->{event} eq 'mousemove') {
-                    $mask = 0;
-                }
-                elsif ($message->{event} eq 'mousemove+mousedown') {
-                    $mask = 1;
-                }
-                else {
-                    warn 'Unknown pointer event';
-                    return;
-                }
-
-                $vnc->pointer_event($message->{x}, $message->{y}, $mask);
+        $slave->on_disconnect(
+            sub {
+                $server->drop_connection($client);
             }
-        }
-    );
+        );
 
-    $self->finished(
-        sub {
-            delete $CLIENTS->{$cid};
+        $vnc->on_handshake(
+            sub {
+                my $vnc = shift;
 
-            app->log->debug('Client disconnected');
+                warn 'Handshake is done';
 
-            undef $vnc;
-        }
-    );
-};
-
-get '/' => sub {
-    my $self = shift;
-
-    my $url = $self->req->url->base->clone;
-    $url->scheme($self->req->is_secure ? 'wss' : 'ws');
-    $url->query->params([]);
-
-    $self->stash(websocket_url => $url->to_abs);
-
-    $self->stash(width => $config->{width});
-    $self->stash(height => $config->{height});
-} => 'index';
-
-sub _get_id {
-    my $self = shift;
-
-    my $tx = $self->tx;
-    my $cid = "$tx";
-    #$cid =~ s/\(.*?\)/$1/;
-    return $cid;
-}
-
-sub _message_to_json {
-    my %message = @_;
-
-    my $json = Mojo::JSON::Any->new;
-    return $json->encode({%message});
-}
-
-sub _send_message {
-    my $self = shift;
-
-    $self->send_message(_message_to_json(@_));
-}
-
-# see mojo/examples/flash-policy-server.pl
-print "Remember, you need to also run `sudo perl mojo/examples/flash-policy-server.pl` as root for this to work...\n";
-
-app->start;
-
-1;
-
-__DATA__
-
-@@ index.html.ep
-% layout 'wrapper';
-Please, enable JavaScript.<br /><br />
-
-If your browser doesn't support Websockets,<br />
-make sure you have Flash<br />
-installed. It is used as workaround.
-
-@@ layouts/wrapper.html.ep
-<!doctype html><html>
-    <head>
-        <title>Showmethedesktop</title>
-        <link rel="stylesheet" href="/styles.css" type="text/css" />
-        <script type="text/javascript" src="/jquery.min.js"></script>
-        <script type="text/javascript" src="/jquery.json.min.js"></script>
-        <script type="text/javascript" src="/websocketVNC.js"></script>
-        <script type="text/javascript">
-            // Only load the flash fallback when needed
-            if (!('WebSocket' in window)) {
-                document.write([
-                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/swfobject.js"></scr'+'ipt>',
-                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/FABridge.js"></scr'+'ipt>',
-                    '<scr'+'ipt type="text/javascript" src="/web-socket-js/web_socket.js"></scr'+'ipt>'
-                ].join(''));
+                $client->send_message(
+                    JSON->new->encode(
+                        {   type   => 's',
+                            name   => $vnc->server_name,
+                            width  => $WIDTH || $vnc->width,
+                            height => $HEIGHT || $vnc->height
+                        }
+                    )
+                );
             }
-        </script>
-        <script type="text/javascript">
-            if (WebSocket.__initialize) {
-                // Set URL of your WebSocketMain.swf here:
-                WebSocket.__swfLocation = '/web-socket-js/WebSocketMain.swf';
-            }
+        );
 
-            $(document).ready(function() {
-                $('#canvas').websocketVNC({
-                    "url":"<%= stash 'websocket_url' %>",
-                    "width":<%= stash 'width' %>,
-                    "height":<%= stash 'height' %>
-                });
-            });
-        </script>
-    </head>
-    <body>
-        <div class="container">
-            <table border="0" height="100%" style="margin:auto">
-            <tr><td style="vertical-align:middle">
-                <div id="canvas">
-                    <%== content %>
-                </div>
-            </td></tr>
-            </table>
-        </div>
-    </body>
-</html>
+        $vnc->on_framebuffer_update(
+            sub {
+                my ($vnc, $message) = @_;
+
+                warn 'Sending rectangles to the client ='
+                  . @{$message->rectangles};
+
+                $client->send_message(
+                    JSON->new->encode(
+                        {type => 'fu', rectangles => $message->rectangles}
+                    )
+                );
+            }
+        );
+
+        $vnc->on_write(
+            sub {
+                my ($vnc, $chunk) = @_;
+
+                $slave->send_message($chunk);
+            }
+        );
+
+        $client->on_message(
+            sub {
+                my ($client, $message) = @_;
+
+                warn "Message from client $message";
+
+                my $json = JSON->new;
+
+                $message = $json->decode($message);
+                return unless $message;
+
+                if ($message->{type} eq 'fuq') {
+                    $vnc->framebuffer_update_request($message->{x},
+                        $message->{y}, $message->{width}, $message->{height},
+                        $message->{incremental});
+                }
+                elsif ($message->{type} eq 'pe') {
+                    my $mask = 0;
+
+                    if ($message->{event} eq 'mouseup') {
+                        $mask = 0;
+                    }
+                    elsif ($message->{event} eq 'mousedown') {
+                        $mask = 1;
+                    }
+                    elsif ($message->{event} eq 'mousemove') {
+                        $mask = 0;
+                    }
+                    elsif ($message->{event} eq 'mousemove+mousedown') {
+                        $mask = 1;
+                    }
+                    else {
+                        warn 'Unknown pointer event';
+                        return;
+                    }
+
+                    $vnc->pointer_event($message->{x}, $message->{y}, $mask);
+                }
+                elsif ($message->{type} eq 'ke') {
+                    $vnc->key_event($message->{is_down}, $message->{key});
+                }
+            }
+        );
+
+        $self->add_slave($slave);
+    }
+);
+
+$server->start;
