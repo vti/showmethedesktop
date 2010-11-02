@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 use FindBin;
-#use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
-use lib "/Users/vti/dev/protocol-rfb/lib";
+
+use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
 use lib "$FindBin::Bin/contrib/reanimator/lib";
 
 use JSON;
@@ -16,6 +16,7 @@ use Protocol::RFB::Client;
 use Getopt::Long 'GetOptions';
 use File::Basename;
 
+my $HELP    = 0;
 my $ADDRESS = 'localhost';
 my $PORT    = 5900;
 my $PASSWORD;
@@ -23,6 +24,7 @@ my $WIDTH;
 my $HEIGHT;
 
 GetOptions(
+    "help|h"     => \$HELP,
     "address=s"  => \$ADDRESS,
     "port=s"     => \$PORT,
     "password=s" => \$PASSWORD,
@@ -44,7 +46,7 @@ Other options:
 
 EOF
 
-die $USAGE unless $PASSWORD;
+die $USAGE if $HELP || !$PASSWORD;
 
 my $server = ReAnimator->new;
 

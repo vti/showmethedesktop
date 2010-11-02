@@ -1,0 +1,30 @@
+=head1 Perl + VNC + WebSockets
+
+This is a cool visualization of what WebSockets can and will do in the nearest
+future. To run this script you only need Perl.
+
+=head1 SYNOPSYS
+
+    $ perl showmethedesktop
+    Usage: showmethedesktop --password <password>
+
+    Other options:
+
+        --address   Default is 'localhost'
+        --port      Default is '5900'
+
+        --width     Default is server's width
+        --height    Default is server's height
+
+    $ perl showmethedesktop --address 192.168.0.1 --port 5901 \
+        --password bad --width 500 --height 400
+    Listening on localhost:3000
+
+Now open in your browser C<where-you-cloned-the-repo/public/index.html> and
+enjoy VNC!
+
+=head1 SEE ALSO
+
+L<http://github.com/vti/protocol-rfb.git> for VNC protocol parsing module
+
+L<http://github.com/vti/reanimator.git> for Perl WebSocket server
