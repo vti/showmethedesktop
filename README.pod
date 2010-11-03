@@ -23,6 +23,10 @@ future. To run this script you only need Perl.
 Now open in your browser C<where-you-cloned-the-repo/public/index.html> and
 enjoy VNC!
 
+=head1 DEMO
+
+L<http://vimeo.com/16459612>
+
 =head1 SEE ALSO
 
 L<http://github.com/vti/protocol-rfb.git> for VNC protocol parsing module
