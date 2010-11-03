@@ -8,15 +8,15 @@ use Test::More tests => 3;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use_ok 'ReAnimator::Location';
+use_ok 'ReAnimator::WebSocket::Location';
 
-my $l = ReAnimator::Location->new(
+my $l = ReAnimator::WebSocket::Location->new(
     host   => 'foo.com',
     secure => 1
 );
 is $l->to_string => 'wss://foo.com/';
 
-$l = ReAnimator::Location->new(
+$l = ReAnimator::WebSocket::Location->new(
     host          => 'foo.com',
     resource_name => '/demo'
 );

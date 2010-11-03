@@ -3,14 +3,16 @@
 use strict;
 use warnings;
 
-use Test::More tests => 18;
+use utf8;
+
+use Test::More tests => 20;
 
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use_ok 'ReAnimator::Frame';
+use_ok 'ReAnimator::WebSocket::Frame';
 
-my $f = ReAnimator::Frame->new;
+my $f = ReAnimator::WebSocket::Frame->new;
 
 $f->append;
 ok not defined $f->next;
@@ -44,8 +46,17 @@ is $f->next => 'foo';
 is $f->next => 'bar';
 ok not defined $f->next;
 
-$f = ReAnimator::Frame->new;
+use Encode;
+# We append bytes, but read characters
+$f->append("\x00" . Encode::encode_utf8('☺') . "\xff");
+is $f->next => '☺';
+
+$f = ReAnimator::WebSocket::Frame->new;
 is $f->to_string => "\x00\xff";
 
-$f = ReAnimator::Frame->new('123');
+$f = ReAnimator::WebSocket::Frame->new('123');
 is $f->to_string => "\x00123\xff";
+
+# We pass characters, but send bytes
+$f = ReAnimator::WebSocket::Frame->new('☺');
+is $f->to_string => "\x00" . Encode::encode_utf8("☺"). "\xff";

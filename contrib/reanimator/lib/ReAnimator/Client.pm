@@ -5,37 +5,27 @@ use warnings;
 
 use base 'ReAnimator::Connection';
 
-use ReAnimator::Handshake;
-use ReAnimator::Frame;
+use ReAnimator::WebSocket::Handshake;
+use ReAnimator::WebSocket::Frame;
 
 sub new {
     my $self = shift->SUPER::new(@_);
 
-    $self->{frame}     = ReAnimator::Frame->new;
-    $self->{handshake} = ReAnimator::Handshake->new;
+    $self->{frame}     = ReAnimator::WebSocket::Frame->new;
+    $self->{handshake} = ReAnimator::WebSocket::Handshake->new;
 
     $self->{buffer} = '';
 
-    $self->state('handshake');
+    $self->connected;
 
     return $self;
-}
-
-sub is_connected { shift->is_state('connected') }
-
-sub connected {
-    my $self = shift;
-
-    $self->state('connected');
-
-    $self->on_connect->($self);
 }
 
 sub read {
     my $self  = shift;
     my $chunk = shift;
 
-    if ($self->is_state('handshake')) {
+    unless ($self->{handshake}->is_done) {
         my $handshake = $self->{handshake};
 
         my $rs = $handshake->parse($chunk);
@@ -45,7 +35,6 @@ sub read {
             my $res = $handshake->res->to_string;
 
             $self->write($res);
-            $self->connected;
 
             return 1;
         }
@@ -65,9 +54,9 @@ sub send_message {
     my $self    = shift;
     my $message = shift;
 
-    return unless $self->is_connected;
+    return unless $self->{handshake}->is_done;
 
-    my $frame = ReAnimator::Frame->new($message);
+    my $frame = ReAnimator::WebSocket::Frame->new($message);
     $self->write($frame->to_string);
 }
 

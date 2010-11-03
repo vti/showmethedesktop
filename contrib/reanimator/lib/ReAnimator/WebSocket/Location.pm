@@ -1,4 +1,4 @@
-package ReAnimator::Location;
+package ReAnimator::WebSocket::Location;
 
 use strict;
 use warnings;

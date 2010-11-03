@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+
+# Based on http://github.com/xantus/mojo-websocket-examples.git
+
+use strict;
+use warnings;
+
+use FindBin;
+use lib "$FindBin::Bin/../../lib";
+
+use ReAnimator;
+use ReAnimator::Slave;
+
+my $server = ReAnimator->new;
+
+my $irc_server  = 'irc.perl.org';
+my $irc_port    = 6667;
+my $irc_channel = 'ru.pm';
+
+$server->on_connect(
+    sub {
+        my ($self, $client) = @_;
+
+        my $slave =
+          ReAnimator::Slave->new(address => $irc_server, port => $irc_port);
+
+        $slave->on_message(
+            sub {
+                my $slave   = shift;
+                my $message = shift;
+
+                $client->send_message($message);
+            }
+        );
+
+        $slave->on_connect(
+            sub {
+                warn 'connected';
+            }
+        );
+
+        $slave->on_disconnect(
+            sub {
+                $server->drop_connection($client);
+            }
+        );
+
+        $client->on_message(
+            sub {
+                my ($client, $message) = @_;
+
+                if ($message =~ s{^/nick }{}) {
+                    $slave->send_message("NICK $message\n");
+                }
+                elsif ($message =~ s{^/quit}{}) {
+                    $slave->send_message("QUIT\n");
+                }
+                elsif ($message =~ s{^/join #?}{}) {
+                    $irc_channel = $message;
+                    $slave->send_message("JOIN $message\n");
+                }
+                else {
+                    $slave->send_message("PRIVMSG #$irc_channel :$message\n");
+                }
+            }
+        );
+
+        $self->add_slave($slave);
+
+        $client->send_message('Connecting to ' . $irc_server . '...');
+
+        my $rand = 'ReAnimator' . int(rand(10000));
+        $slave->send_message(
+            "NICK $rand\nUSER reanimator reanimator-websocket 127.0.0.1 :reanimator-websocket user\n"
+        );
+        $slave->send_message("JOIN #$irc_channel\n");
+    }
+);
+
+$server->start;

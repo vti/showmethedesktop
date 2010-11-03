@@ -4,12 +4,12 @@ use strict;
 use warnings;
 
 use FindBin;
-use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../../lib";
 
-use Reanimator;
-use Reanimator:Slave;
+use ReAnimator;
+use ReAnimator::Slave;
 
-my $server = Reanimator->new;
+my $server = ReAnimator->new;
 
 $server->on_connect(
     sub {
@@ -37,11 +37,11 @@ $server->on_connect(
             sub {
                 my ($clent) = @_;
 
-                warn "Disconnected!";
+                warn "Client disconnected!";
             }
         );
 
-        my $c = Reanimator::Slave->new(
+        my $slave = ReAnimator::Slave->new(
             address    => '127.0.0.1',
             port       => 3333,
             on_message => sub {
@@ -54,15 +54,24 @@ $server->on_connect(
             on_connect => sub {
                 my $slave = shift;
 
+                warn 'Connected to slave';
+
                 $slave->send_message('Hello!');
             },
             on_disconnect => sub {
+                warn 'Slave disconnected';
             },
             on_error => sub {
+                my $slave = shift;
+                my $error = shift;
+
+                warn 'Slave error: ' . $error;
+
+                $self->drop($client);
             }
         );
 
-        $server->add_slave($c);
+        $server->add_slave($slave);
     }
 );
 

@@ -1,4 +1,4 @@
-package ReAnimator::Request;
+package ReAnimator::WebSocket::Request;
 
 use strict;
 use warnings;

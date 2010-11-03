@@ -1,9 +1,9 @@
-package ReAnimator::Response;
+package ReAnimator::WebSocket::Response;
 
 use strict;
 use warnings;
 
-use ReAnimator::Location;
+use ReAnimator::WebSocket::Location;
 
 sub new {
     my $class = shift;
@@ -29,7 +29,7 @@ sub checksum { @_ > 1 ? $_[0]->{checksum} = $_[1] : $_[0]->{checksum} }
 sub location {
     my $self = shift;
 
-    return ReAnimator::Location->new(
+    return ReAnimator::WebSocket::Location->new(
         host          => $self->host,
         secure        => $self->secure,
         resource_name => $self->resource_name,

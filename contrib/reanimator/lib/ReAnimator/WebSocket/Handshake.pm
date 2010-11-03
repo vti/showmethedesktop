@@ -1,10 +1,10 @@
-package ReAnimator::Handshake;
+package ReAnimator::WebSocket::Handshake;
 
 use strict;
 use warnings;
 
-use ReAnimator::Request;
-use ReAnimator::Response;
+use ReAnimator::WebSocket::Request;
+use ReAnimator::WebSocket::Response;
 
 sub new {
     my $class = shift;
@@ -13,7 +13,7 @@ sub new {
     my $self = {@_};
     bless $self, $class;
 
-    $self->{req} = ReAnimator::Request->new;
+    $self->{req} = ReAnimator::WebSocket::Request->new;
 
     return $self;
 }
@@ -25,7 +25,7 @@ sub res {
 
     my $req = $self->{req};
 
-    my $res = ReAnimator::Response->new(
+    my $res = ReAnimator::WebSocket::Response->new(
         version       => $req->version,
         host          => $req->host,
         secure        => 0,
