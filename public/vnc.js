@@ -6,14 +6,14 @@ function VNC () {
         vnc.width  = options.width;
         vnc.height = options.height;
 
-        vnc.canvas = $('#canvas');
+        vnc.container = $('#container');
 
-        vnc.canvas.html('');
+        vnc.container.html('');
 
-        vnc.canvas.append('<div><span id="vnc-name">' + vnc.name + '</span>:<span id="vnc-width">' + vnc.width + '</span>x<span id="vnc-height">' + vnc.height + '</span></div>');
-        vnc.canvas.append('<canvas width="' + vnc.width + '" height="' + vnc.height + '"></canvas>');
-        vnc.canvas.canvas = $('canvas');
-        vnc.context = vnc.canvas.canvas[0].getContext('2d');
+        vnc.container.append('<div><span id="vnc-name">' + vnc.name + '</span>:<span id="vnc-width">' + vnc.width + '</span>x<span id="vnc-height">' + vnc.height + '</span></div>');
+        vnc.container.append('<canvas width="' + vnc.width + '" height="' + vnc.height + '"></canvas>');
+        vnc.container.canvas = $('canvas');
+        vnc.context = vnc.container.canvas[0].getContext('2d');
         if (!vnc.context) {
             alert('Error: failed to getContext!');
             return;
@@ -78,7 +78,7 @@ function VNC () {
     };
 
     this.currentMouseCoords = function(e) {
-        var pos = vnc.canvas.canvas.offset();
+        var pos = vnc.container.canvas.offset();
 
         var x = Math.floor(e.pageX - pos.left);
         var y = Math.floor(e.pageY - pos.top);
@@ -89,7 +89,7 @@ function VNC () {
     this.bind_mouse_events = function() {
         console.log('Binding mouse events');
 
-        vnc.canvas.bind('mousedown', function(e) {
+        vnc.container.bind('mousedown', function(e) {
             var coords = vnc.currentMouseCoords(e);
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":"mousedown"}));
             vnc.requestUpdate();
@@ -100,14 +100,14 @@ function VNC () {
             vnc.mousedown = false;
         });
 
-        vnc.canvas.bind('mouseup', function(e) {
+        vnc.container.bind('mouseup', function(e) {
             vnc.mousedown = false;
             var coords = vnc.currentMouseCoords(e);
             vnc.send($.toJSON({"type":"pe","x":coords.x,"y":coords.y,"event":"mouseup"}));
             vnc.requestUpdate();
         });
 
-        vnc.canvas.bind('mousemove', function(e) {
+        vnc.container.bind('mousemove', function(e) {
             var coords = vnc.currentMouseCoords(e);
             var action = 'mousemove';
             if (vnc.mousedown) {
@@ -121,13 +121,13 @@ function VNC () {
     this.unbind_mouse_events = function() {
         console.log('UnBinding mouse events');
 
-        vnc.canvas.unbind('mousedown');
+        vnc.container.unbind('mousedown');
 
         $(document).unbind('mouseup');
 
-        vnc.canvas.unbind('mouseup');
+        vnc.container.unbind('mouseup');
 
-        vnc.canvas.unbind('mousemove');
+        vnc.container.unbind('mousemove');
     };
 
     this.send = function(message) {

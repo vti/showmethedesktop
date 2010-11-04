@@ -7,10 +7,6 @@
         <script type="text/javascript" src="vnc.js"></script>
         <script type="text/javascript">
             $(document).ready(function() {
-                <!--$('#canvas').websocketVNC({-->
-                    <!--"url":"ws://127.0.0.1:3000"-->
-                <!--});-->
-
                 var ws = new WebSocket("ws://127.0.0.1:3000");
 
                 var vnc = new VNC();
@@ -19,18 +15,18 @@
                 };
 
                 ws.onerror = function(e) {
-                    $('#canvas').html('Error: ' + e);
+                    $('#container').html('Error: ' + e);
                 };
 
                 ws.onopen = function() {
-                    $('#canvas').html('Connected. Initializing...');
+                    $('#container').html('Connected. Initializing...');
                 };
 
                 ws.onmessage = function(e) {
                     var data = $.evalJSON(e.data);
 
                     if (data.type == 's') {
-                        $('#canvas').html('Loading...');
+                        $('#container').html('Loading...');
 
                         vnc.init(data);
                     }
@@ -42,20 +38,14 @@
 
                 ws.onclose = function() {
                     vnc.cleanup();
-                    $('#canvas').html('Disconnected');
+                    $('#container').html('Disconnected');
                 };
             });
         </script>
     </head>
     <body>
-        <div class="container">
-            <table border="0" height="100%" style="margin:auto">
-            <tr><td style="vertical-align:middle">
-                <div id="canvas">
-                    Connecting...
-                </div>
-            </td></tr>
-            </table>
+        <div id="container">
+            Connecting...
         </div>
     </body>
 </html>
