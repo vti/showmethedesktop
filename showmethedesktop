@@ -8,6 +8,8 @@ use FindBin;
 use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
 use lib "$FindBin::Bin/contrib/reanimator/lib";
 
+use constant DEBUG => $ENV{SHOWMETHEDESKTOP_DEBUG} ? 1 : 0;
+
 use JSON;
 use ReAnimator;
 use ReAnimator::Slave;
@@ -70,7 +72,9 @@ $server->on_connect(
 
         $slave->on_disconnect(
             sub {
-                $server->drop_connection($client);
+                warn 'Slave disconnected' if DEBUG;
+
+                $server->drop($client);
             }
         );
 
@@ -78,7 +82,7 @@ $server->on_connect(
             sub {
                 my $vnc = shift;
 
-                warn 'Handshake is done';
+                warn 'Handshake is done' if DEBUG;
 
                 $client->send_message(
                     JSON->new->encode(
@@ -97,13 +101,16 @@ $server->on_connect(
                 my ($vnc, $message) = @_;
 
                 warn 'Sending rectangles to the client ='
-                  . @{$message->rectangles};
+                  . @{$message->rectangles}
+                  if DEBUG;
 
-                $client->send_message(
-                    JSON->new->encode(
-                        {type => 'fu', rectangles => $message->rectangles}
-                    )
-                );
+                foreach my $rectangle (@{$message->rectangles}) {
+                    $client->send_message(
+                        JSON->new->encode(
+                            {type => 'fu', rectangle => $rectangle}
+                        )
+                    );
+                }
             }
         );
 
@@ -119,12 +126,12 @@ $server->on_connect(
             sub {
                 my ($client, $message) = @_;
 
-                warn "Message from client $message";
+                warn "Message from client $message" if DEBUG;
 
                 my $json = JSON->new;
 
-                $message = $json->decode($message);
-                return unless $message;
+                eval { $message = $json->decode($message); };
+                return if !$message || $@;
 
                 if ($message->{type} eq 'fuq') {
                     $vnc->framebuffer_update_request($message->{x},

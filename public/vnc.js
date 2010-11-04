@@ -26,6 +26,11 @@ function VNC () {
         vnc.bind_keyboard_events();
     };
 
+    this.cleanup = function() {
+        vnc.unbind_mouse_events();
+        vnc.unbind_keyboard_events();
+    };
+
     this.requestUpdate = function() {
         vnc.send($.toJSON({"type":"fuq","x":0,"y":0,"width":vnc.width,"height":vnc.height, "incremental":1}));
     };
@@ -64,6 +69,12 @@ function VNC () {
                 return false;
             }
         });
+    };
+
+    this.unbind_keyboard_events = function() {
+        $(document).unbind('keyup');
+        $(document).unbind('keypress');
+        $(document).unbind('keydown');
     };
 
     this.currentMouseCoords = function(e) {
@@ -123,37 +134,33 @@ function VNC () {
         vnc.onsend(message);
     };
 
-    this.update = function(rectangles) {
+    this.update = function(message) {
         vnc.unbind_mouse_events();
-
-        console.log("rectangles length=" + rectangles.length);
 
         vnc.stopTimer();
 
-        for (var i = 0; i < rectangles.length; i++) {
-            var x        = rectangles[i].x;
-            var y        = rectangles[i].y;
-            var width    = rectangles[i].width;
-            var height   = rectangles[i].height;
-            var encoding = rectangles[i].encoding;
-            var data     = rectangles[i].data;
+        var x         = message.rectangle.x;
+        var y         = message.rectangle.y;
+        var width     = message.rectangle.width;
+        var height    = message.rectangle.height;
+        var encoding  = message.rectangle.encoding;
+        var data      = message.rectangle.data;
 
-            console.log("x,y=" + x + ',' + y);
+        console.log("x,y=" + x + ',' + y);
 
-            if (encoding == 'Raw') {
-                //var img = vnc.context.createImageData(width, height);
-                var img = vnc.context.getImageData(0, 0, width, height);
+        if (encoding == 'Raw') {
+            //var img = vnc.context.createImageData(width, height);
+            var img = vnc.context.getImageData(0, 0, width, height);
 
-                for (var j = 0; j < data.length; j++) {
-                    img.data[j] = data[j];
-                }
-
-                vnc.context.putImageData(img, x, y);
+            for (var j = 0; j < data.length; j++) {
+                img.data[j] = data[j];
             }
-            else if (encoding == 'CopyRect') {
-                var img = vnc.context.getImageData(data[0], data[1], width, height);
-                vnc.context.putImageData(img, x, y);
-            }
+
+            vnc.context.putImageData(img, x, y);
+        }
+        else if (encoding == 'CopyRect') {
+            var img = vnc.context.getImageData(data[0], data[1], width, height);
+            vnc.context.putImageData(img, x, y);
         }
 
         vnc.startTimer();

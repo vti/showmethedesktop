@@ -19,7 +19,7 @@
                 };
 
                 ws.onerror = function(e) {
-                    vnc.displayMessage("Error: " + e);
+                    $('#canvas').html('Error: ' + e);
                 };
 
                 ws.onopen = function() {
@@ -36,11 +36,12 @@
                     }
                     else if (data.type == 'fu') {
                         console.log("websocket update");
-                        vnc.update(data.rectangles)
+                        vnc.update(data)
                     }
                 };
 
                 ws.onclose = function() {
+                    vnc.cleanup();
                     $('#canvas').html('Disconnected');
                 };
             });
