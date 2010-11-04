@@ -15,10 +15,14 @@
                 };
 
                 ws.onerror = function(e) {
+                    $('#disconnect').html('');
                     $('#container').html('Error: ' + e);
                 };
 
                 ws.onopen = function() {
+                $('#disconnect').html('<a href="#">Disconnect</a>');
+                $('#disconnect > a').click(function() { ws.close(); return false; });
+
                     $('#container').html('Connected. Initializing...');
                 };
 
@@ -38,12 +42,14 @@
 
                 ws.onclose = function() {
                     vnc.cleanup();
+                    $('#disconnect').html('');
                     $('#container').html('Disconnected');
                 };
             });
         </script>
     </head>
     <body>
+        <div id="disconnect"></div>
         <div id="container">
             Connecting...
         </div>
