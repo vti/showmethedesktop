@@ -141,10 +141,18 @@ sub _write {
 
         $conn->connected;
 
-        return unless $conn->is_writing;
+        unless ($conn->is_writing) {
+            $self->loop->mask_ro($conn->socket);
+            return;
+        }
     }
 
     warn '> ' . $conn->buffer if DEBUG;
+
+    unless ($conn->is_writing) {
+        $self->drop($conn);
+        return;
+    }
 
     my $br = syswrite($conn->socket, $conn->buffer);
 
