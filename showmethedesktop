@@ -18,6 +18,8 @@ use Protocol::RFB::Client;
 use Getopt::Long 'GetOptions';
 use File::Basename;
 
+$SIG{INT} = $SIG{TERM} = sub { exit 0 };
+
 my $HELP    = 0;
 my $ADDRESS = 'localhost';
 my $PORT    = 5900;
