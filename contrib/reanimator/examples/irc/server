@@ -9,7 +9,6 @@ use FindBin;
 use lib "$FindBin::Bin/../../lib";
 
 use ReAnimator;
-use ReAnimator::Slave;
 
 my $server = ReAnimator->new;
 
@@ -21,28 +20,18 @@ $server->on_connect(
     sub {
         my ($self, $client) = @_;
 
-        my $slave =
-          ReAnimator::Slave->new(address => $irc_server, port => $irc_port);
+        my $slave = $self->connect(
+            address    => $irc_server,
+            port       => $irc_port,
+            on_connect => sub {
+                my $self = shift;
 
-        $slave->on_message(
-            sub {
-                my $slave   = shift;
-                my $message = shift;
-
-                $client->send_message($message);
-            }
-        );
-
-        $slave->on_connect(
-            sub {
-                warn 'connected';
-            }
-        );
-
-        $slave->on_disconnect(
-            sub {
-                $server->drop_connection($client);
-            }
+                $self->write(_irc_nick_command());
+                $self->write(_irc_join_command($irc_channel));
+            },
+            on_disconnect => sub { $server->drop($client) },
+            on_read       => sub { shift; $client->send_message(@_) },
+            on_error      => sub { $server->drop($client) }
         );
 
         $client->on_message(
@@ -50,31 +39,33 @@ $server->on_connect(
                 my ($client, $message) = @_;
 
                 if ($message =~ s{^/nick }{}) {
-                    $slave->send_message("NICK $message\n");
+                    $slave->write("nick $message\n");
                 }
                 elsif ($message =~ s{^/quit}{}) {
-                    $slave->send_message("QUIT\n");
+                    $slave->write("quit\n");
                 }
                 elsif ($message =~ s{^/join #?}{}) {
                     $irc_channel = $message;
-                    $slave->send_message("JOIN $message\n");
+                    $slave->write("join $message\n");
                 }
                 else {
-                    $slave->send_message("PRIVMSG #$irc_channel :$message\n");
+                    $slave->write("privmsg #$irc_channel :$message\n");
+                    $client->send_message("$message\n");
                 }
             }
         );
 
-        $self->add_slave($slave);
-
         $client->send_message('Connecting to ' . $irc_server . '...');
-
-        my $rand = 'ReAnimator' . int(rand(10000));
-        $slave->send_message(
-            "NICK $rand\nUSER reanimator reanimator-websocket 127.0.0.1 :reanimator-websocket user\n"
-        );
-        $slave->send_message("JOIN #$irc_channel\n");
     }
 );
 
-$server->start;
+$server->listen;
+
+sub _irc_nick_command {
+    my $rand = 'ReAnimator' . int(rand(10000));
+
+    return
+      "NICK $rand\nUSER reanimator reanimator-websocket 127.0.0.1 :reanimator-websocket user\n";
+}
+
+sub _irc_join_command {"JOIN #$_[0]\n"}

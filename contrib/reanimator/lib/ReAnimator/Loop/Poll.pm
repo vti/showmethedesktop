@@ -45,8 +45,10 @@ sub mask_ro {
     $self->poll->mask($socket => POLLIN);
 }
 
-sub readers { shift->poll->handles(POLLIN | POLLERR) }
-sub writers { shift->poll->handles(POLLOUT | POLLERR | POLLHUP) }
+sub readers { shift->poll->handles(POLLIN) }
+sub writers { shift->poll->handles(POLLOUT) }
+sub errors  { shift->poll->handles(POLLERR) }
+sub hups    { shift->poll->handles(POLLHUP) }
 
 sub remove { shift->poll->remove(@_) }
 

@@ -26,4 +26,4 @@ $server->on_connect(
     }
 );
 
-$server->start;
+$server->listen;

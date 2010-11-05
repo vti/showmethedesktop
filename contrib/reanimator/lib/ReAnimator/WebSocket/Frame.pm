@@ -12,7 +12,7 @@ sub new {
     my $self = {@_};
     bless $self, $class;
 
-    $self->{buffer} = length $buffer ? $buffer : '';
+    $self->{buffer} = defined $buffer ? $buffer : '';
 
     return $self;
 }
