@@ -5,14 +5,17 @@ use warnings;
 
 use FindBin;
 
-use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
-use lib "$FindBin::Bin/contrib/reanimator/lib";
+BEGIN {
+    use lib "$FindBin::Bin/contrib/protocol-rfb/lib";
+    use lib "$FindBin::Bin/contrib/protocol-websocket/lib";
+    use lib "$FindBin::Bin/contrib/event_reactor/lib";
+    use lib "$FindBin::Bin/contrib/reanimator/lib";
+}
 
 use constant DEBUG => $ENV{SHOWMETHEDESKTOP_DEBUG} ? 1 : 0;
 
 use JSON;
 use ReAnimator;
-use ReAnimator::Slave;
 use Protocol::RFB::Client;
 
 use Getopt::Long 'GetOptions';
@@ -20,18 +23,18 @@ use File::Basename;
 
 $SIG{INT} = $SIG{TERM} = sub { exit 0 };
 
-my $HELP    = 0;
-my $ADDRESS = 'localhost';
-my $PORT    = 5900;
-my $PASSWORD;
+my $HELP        = 0;
+my $VNC_ADDRESS = 'localhost';
+my $VNC_PORT    = 5900;
+my $VNC_PASSWORD;
 my $WIDTH;
 my $HEIGHT;
 
 GetOptions(
     "help|h"     => \$HELP,
-    "address=s"  => \$ADDRESS,
-    "port=s"     => \$PORT,
-    "password=s" => \$PASSWORD,
+    "address=s"  => \$VNC_ADDRESS,
+    "port=s"     => \$VNC_PORT,
+    "password=s" => \$VNC_PASSWORD,
     "width=i"    => \$WIDTH,
     "height=i"   => \$HEIGHT
 );
@@ -42,41 +45,38 @@ Usage: $basename --password <password>
 
 Other options:
 
-    --address   Default is '$ADDRESS'
-    --port      Default is '$PORT'
+    --address   Default is '$VNC_ADDRESS'
+    --port      Default is '$VNC_PORT'
 
     --width     Default is server's width
     --height    Default is server's height
 
 EOF
 
-die $USAGE if $HELP || !$PASSWORD;
+die $USAGE if $HELP || !$VNC_PASSWORD;
 
-my $server = ReAnimator->new;
-
-$server->on_connect(
-    sub {
+ReAnimator->new(
+    on_accept => sub {
         my ($self, $client) = @_;
 
-        my $slave =
-          ReAnimator::Slave->new(address => $ADDRESS, port => $PORT);
+        my $vnc = Protocol::RFB::Client->new(password => $VNC_PASSWORD);
 
-        my $vnc = Protocol::RFB::Client->new(password => '333333');
-
-        $slave->on_message(
-            sub {
+        my $slave = $self->event_reactor->connect(
+            address    => $VNC_ADDRESS,
+            port       => $VNC_PORT,
+            on_connect => sub {
                 my $slave = shift;
-                my $chunk = shift;
 
-                $vnc->parse($chunk);
-            }
-        );
+                $slave->on_read(
+                    sub {
+                        my $slave = shift;
+                        my $chunk = shift;
 
-        $slave->on_disconnect(
-            sub {
-                warn 'Slave disconnected' if DEBUG;
+                        $vnc->parse($chunk);
+                    }
+                );
 
-                $server->drop($client);
+                $slave->on_disconnect(sub { $self->drop($client) });
             }
         );
 
@@ -102,10 +102,6 @@ $server->on_connect(
             sub {
                 my ($vnc, $message) = @_;
 
-                warn 'Sending rectangles to the client ='
-                  . @{$message->rectangles}
-                  if DEBUG;
-
                 foreach my $rectangle (@{$message->rectangles}) {
                     $client->send_message(
                         JSON->new->encode(
@@ -120,7 +116,7 @@ $server->on_connect(
             sub {
                 my ($vnc, $chunk) = @_;
 
-                $slave->send_message($chunk);
+                $slave->write($chunk);
             }
         );
 
@@ -167,9 +163,5 @@ $server->on_connect(
                 }
             }
         );
-
-        $self->add_slave($slave);
     }
-);
-
-$server->start;
+)->listen->start;
